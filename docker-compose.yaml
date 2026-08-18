@@ -13,6 +13,7 @@ x-frontend-environment: &frontend-environment
   AUTH_SECRET: ${SERVICE_HEX_64_AUTH}
   BETTER_AUTH_SECRET: ${SERVICE_HEX_64_AUTH}
   INTERNAL_API_TOKEN: ${SERVICE_HEX_64_INTERNAL}
+  REVALIDATION_SECRET: ${SERVICE_HEX_64_INTERNAL}
   BETTER_AUTH_URL: https://trycomp-api.yumait.au
   NEXT_PUBLIC_BETTER_AUTH_URL: https://trycomp-api.yumait.au
   NEXT_PUBLIC_API_URL: https://trycomp-api.yumait.au
