@@ -17,10 +17,20 @@ COPY packages/integrations/package.json ./packages/integrations/
 COPY packages/utils/package.json ./packages/utils/
 COPY packages/tsconfig/package.json ./packages/tsconfig/
 COPY packages/analytics/package.json ./packages/analytics/
+COPY packages/auth/package.json ./packages/auth/
+COPY packages/billing/package.json ./packages/billing/
+COPY packages/company/package.json ./packages/company/
+COPY packages/db/package.json ./packages/db/
+COPY packages/device-agent/package.json ./packages/device-agent/
+COPY packages/docs/package.json ./packages/docs/
+COPY packages/framework-editor-cli/package.json ./packages/framework-editor-cli/
 
 # Copy app package.json files
 COPY apps/app/package.json ./apps/app/
 COPY apps/portal/package.json ./apps/portal/
+COPY apps/api/package.json ./apps/api/
+COPY apps/framework-editor/package.json ./apps/framework-editor/
+COPY apps/browser-extension/security-questionnaire-ext/package.json ./apps/browser-extension/security-questionnaire-ext/
 
 # Install all dependencies
 RUN PRISMA_SKIP_POSTINSTALL_GENERATE=true bun install --ignore-scripts
@@ -71,6 +81,10 @@ COPY --from=deps /app/node_modules ./node_modules
 RUN cd packages/db && node scripts/combine-schemas.js \
                    && node scripts/generate-prisma-client-js.js
 
+# Workspace consumers import @trycompai/db through its dist entrypoint.
+RUN mkdir -p packages/db/dist \
+    && printf "%s\n" "export * from '@prisma/client';" > packages/db/dist/index.js
+
 # Ensure Next build has required public env at build-time
 ARG NEXT_PUBLIC_BETTER_AUTH_URL
 ARG NEXT_PUBLIC_PORTAL_URL
@@ -88,8 +102,16 @@ ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL \
     NEXT_OUTPUT_STANDALONE=true \
     NODE_OPTIONS=--max_old_space_size=6144
 
-# Build the app
-RUN cd apps/app && SKIP_ENV_VALIDATION=true bun run build:docker
+# These workspace packages publish only their built dist entrypoints.
+RUN cd packages/auth && bun run build \
+    && cd ../company && bun run build \
+    && cd ../billing && bun run build
+
+# Run Next with Node. Bun 1.2.8 can crash after a Next 16 Turbopack build.
+RUN cd apps/app \
+    && bunx prisma generate --schema=prisma/schema \
+    && node ../../packages/db/scripts/fix-generated-extensions.js src/generated/prisma \
+    && SKIP_ENV_VALIDATION=true node ../../node_modules/next/dist/bin/next build
 
 # =============================================================================
 # STAGE 4: App Production
@@ -120,19 +142,33 @@ COPY apps/portal ./apps/portal
 # Bring in node_modules for build and prisma prebuild
 COPY --from=deps /app/node_modules ./node_modules
 
-# Pre-combine schemas for portal build
-RUN cd packages/db && node scripts/combine-schemas.js
-RUN cp packages/db/dist/schema.prisma apps/portal/prisma/schema.prisma
+# Pre-combine schemas and generate the Prisma client for portal build.
+RUN cd packages/db && node scripts/combine-schemas.js \
+                   && node scripts/generate-prisma-client-js.js
+RUN mkdir -p packages/db/dist \
+    && printf "%s\n" "export * from '@prisma/client';" > packages/db/dist/index.js
+RUN cp packages/db/dist/schema.prisma apps/portal/prisma/schema/schema.prisma \
+    && sed -i 's#output          = "../src/generated/prisma"#output          = "../../src/generated/prisma"#' \
+      apps/portal/prisma/schema/schema.prisma
 
 # Ensure Next build has required public env at build-time
 ARG NEXT_PUBLIC_BETTER_AUTH_URL
+ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL \
+    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production \
     NEXT_OUTPUT_STANDALONE=true \
     NODE_OPTIONS=--max_old_space_size=6144
 
-# Build the portal
-RUN cd apps/portal && SKIP_ENV_VALIDATION=true bun run build:docker
+# These workspace packages publish only their built dist entrypoints.
+RUN cd packages/auth && bun run build \
+    && cd ../company && bun run build
+
+# Run Next with Node. Bun 1.2.8 can crash after a Next 16 Turbopack build.
+RUN cd apps/portal \
+    && bunx prisma generate --schema=prisma/schema \
+    && node ../../packages/db/scripts/fix-generated-extensions.js src/generated/prisma \
+    && SKIP_ENV_VALIDATION=true node ../../node_modules/next/dist/bin/next build
 
 # =============================================================================
 # STAGE 6: Portal Production

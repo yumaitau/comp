@@ -5,58 +5,142 @@ x-logging: &default-logging
     max-file: '5'
     compress: 'true'
 
+x-frontend-environment: &frontend-environment
+  HOSTNAME: 0.0.0.0
+  BETTER_AUTH_URL: https://trycomp-api.yumait.au
+  NEXT_PUBLIC_BETTER_AUTH_URL: https://trycomp-api.yumait.au
+  NEXT_PUBLIC_API_URL: https://trycomp-api.yumait.au
+  NEXT_PUBLIC_PORTAL_URL: https://trycomp-portal.yumait.au
+  AUTH_TRUSTED_ORIGINS: https://trycomp-app.yumait.au,https://trycomp-portal.yumait.au,https://trycomp-api.yumait.au
+
 services:
-  migrator:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: migrator
-    env_file:
-      - packages/db/.env
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    deploy:
+      replicas: ${POSTGRES_REPLICAS:-0}
+    environment:
+      POSTGRES_DB: comp
+      POSTGRES_USER: comp
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/server.key
+    volumes:
+      - comp_pgdata:/var/lib/postgresql/data
+      - /opt/comp/pg-ssl/server.crt:/var/lib/postgresql/server.crt:ro
+      - /opt/comp/pg-ssl/server.key:/var/lib/postgresql/server.key:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U comp -d comp']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      default:
+      legacy:
+        aliases:
+          - postgres
     logging: *default-logging
-  seeder:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: migrator
-    env_file:
-      - packages/db/.env
-    command: sh -lc "bunx prisma generate --schema=node_modules/@trycompai/db/dist/schema.prisma && bun packages/db/prisma/seed/seed.js"
-    logging: *default-logging
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
       target: app
       args:
-        NEXT_PUBLIC_BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+        NEXT_PUBLIC_BETTER_AUTH_URL: https://trycomp-api.yumait.au
+        NEXT_PUBLIC_PORTAL_URL: https://trycomp-portal.yumait.au
+        NEXT_PUBLIC_API_URL: https://trycomp-api.yumait.au
     ports:
-      - '3000:3000'
+      - '127.0.0.1:3100:3000'
     env_file:
-      - apps/app/.env
+      - /opt/comp/apps/app/.env
+    environment: *frontend-environment
     restart: unless-stopped
     healthcheck:
-      test: ['CMD-SHELL', 'curl -f http://localhost:3000/api/health || exit 1']
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "require('http').get('http://127.0.0.1:3000/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
       interval: 30s
       timeout: 10s
-      retries: 3
-    command: sh -lc "node apps/app/server.js"
+      retries: 5
+      start_period: 60s
+    networks:
+      - default
+      - legacy
     logging: *default-logging
+
   portal:
     build:
       context: .
       dockerfile: Dockerfile
       target: portal
       args:
-        NEXT_PUBLIC_BETTER_AUTH_URL: ${BETTER_AUTH_URL_PORTAL}
+        NEXT_PUBLIC_BETTER_AUTH_URL: https://trycomp-api.yumait.au
+        NEXT_PUBLIC_API_URL: https://trycomp-api.yumait.au
     ports:
-      - '3002:3000'
+      - '127.0.0.1:3102:3000'
     env_file:
-      - apps/portal/.env
+      - /opt/comp/apps/portal/.env
+    environment: *frontend-environment
     restart: unless-stopped
     healthcheck:
-      test: ['CMD-SHELL', 'curl -f http://localhost:3000/ || exit 1']
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 60s
+    networks:
+      - default
+      - legacy
     logging: *default-logging
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.multistage
+      target: production
+    ports:
+      - '127.0.0.1:3333:3333'
+    env_file:
+      - /opt/comp/apps/app/.env
+    environment:
+      BASE_URL: https://trycomp-api.yumait.au
+      TRUST_APP_URL: https://trycomp-portal.yumait.au
+      NEXT_PUBLIC_APP_URL: https://trycomp-app.yumait.au
+      NEXT_PUBLIC_PORTAL_URL: https://trycomp-portal.yumait.au
+      AUTH_TRUSTED_ORIGINS: https://trycomp-app.yumait.au,https://trycomp-portal.yumait.au,https://trycomp-api.yumait.au
+      APP_AWS_REGION: us-east-1
+      APP_AWS_ACCESS_KEY_ID: self-hosted-placeholder
+      APP_AWS_SECRET_ACCESS_KEY: self-hosted-placeholder
+      APP_AWS_BUCKET_NAME: self-hosted-placeholder
+      PORT: 3333
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://127.0.0.1:3333/v1/health || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - default
+      - legacy
+    logging: *default-logging
+
+volumes:
+  comp_pgdata:
+    external: true
+    name: comp_comp_pgdata
+
+networks:
+  legacy:
+    external: true
+    name: comp_default
