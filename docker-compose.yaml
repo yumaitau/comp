@@ -85,6 +85,7 @@ services:
       PRISMA_ALLOW_INSECURE_TLS: '1'
       SECRET_KEY: ${SERVICE_HEX_64_AUTH}
       INTERNAL_API_TOKEN: ${SERVICE_HEX_64_INTERNAL}
+      MACED_API_KEY: ${SERVICE_HEX_64_MACED}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       BASE_URL: https://trycomp-api.yumait.au
       TRUST_APP_URL: https://trycomp-portal.yumait.au
