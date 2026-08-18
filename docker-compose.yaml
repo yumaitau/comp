@@ -31,7 +31,7 @@ services:
       - -c
       - ssl_key_file=/var/lib/postgresql/server.key
     volumes:
-      - comp_pgdata:/var/lib/postgresql/data
+      - /var/lib/docker/volumes/comp_comp_pgdata/_data:/var/lib/postgresql/data
       - /opt/comp/pg-ssl/server.crt:/var/lib/postgresql/server.crt:ro
       - /opt/comp/pg-ssl/server.key:/var/lib/postgresql/server.key:ro
     healthcheck:
@@ -59,7 +59,10 @@ services:
       - '127.0.0.1:3100:3000'
     env_file:
       - /opt/comp/apps/app/.env
+    volumes:
+      - /opt/comp/apps/app/.env:/run/config/app.env:ro
     environment: *frontend-environment
+    command: node --env-file=/run/config/app.env apps/app/server.js
     restart: unless-stopped
     healthcheck:
       test:
@@ -87,7 +90,10 @@ services:
       - '127.0.0.1:3102:3000'
     env_file:
       - /opt/comp/apps/portal/.env
+    volumes:
+      - /opt/comp/apps/portal/.env:/run/config/portal.env:ro
     environment: *frontend-environment
+    command: node --env-file=/run/config/portal.env apps/portal/server.js
     restart: unless-stopped
     healthcheck:
       test:
@@ -112,6 +118,8 @@ services:
       - '127.0.0.1:3333:3333'
     env_file:
       - /opt/comp/apps/app/.env
+    volumes:
+      - /opt/comp/apps/app/.env:/run/config/api.env:ro
     environment:
       BASE_URL: https://trycomp-api.yumait.au
       TRUST_APP_URL: https://trycomp-portal.yumait.au
@@ -123,6 +131,12 @@ services:
       APP_AWS_SECRET_ACCESS_KEY: self-hosted-placeholder
       APP_AWS_BUCKET_NAME: self-hosted-placeholder
       PORT: 3333
+    command:
+      - node
+      - --env-file=/run/config/api.env
+      - --report-on-fatalerror
+      - --report-compact
+      - dist/src/main.js
     restart: unless-stopped
     healthcheck:
       test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://127.0.0.1:3333/v1/health || exit 1']
@@ -134,11 +148,6 @@ services:
       - default
       - legacy
     logging: *default-logging
-
-volumes:
-  comp_pgdata:
-    external: true
-    name: comp_comp_pgdata
 
 networks:
   legacy:
