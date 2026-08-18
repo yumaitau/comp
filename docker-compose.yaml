@@ -88,6 +88,8 @@ services:
       INTERNAL_API_TOKEN: ${SERVICE_HEX_64_INTERNAL}
       MACED_API_KEY: ${SERVICE_HEX_64_MACED}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_DEFAULT: ${RESEND_FROM_DEFAULT:-}
+      RESEND_FROM_SYSTEM: ${RESEND_FROM_SYSTEM:-}
       BASE_URL: https://trycomp-api.yumait.au
       TRUST_APP_URL: https://trycomp-portal.yumait.au
       NEXT_PUBLIC_APP_URL: https://trycomp-app.yumait.au
