@@ -39,12 +39,13 @@ function createPrismaClient(): PrismaClient {
   // - Remote with neither: throw at boot — surface the misconfig instead of
   //   silently downgrading.
   const hasCABundle = !!process.env.NODE_EXTRA_CA_CERTS;
+  const disableTls = process.env.PRISMA_DISABLE_TLS === '1';
   const allowInsecure = process.env.PRISMA_ALLOW_INSECURE_TLS === '1';
   let ssl:
     | undefined
     | { checkServerIdentity: () => undefined }
     | { rejectUnauthorized: false };
-  if (isLocalhost) {
+  if (isLocalhost || disableTls) {
     ssl = undefined;
   } else if (hasCABundle) {
     // Verified TLS: rely on Node's TLS context (NODE_EXTRA_CA_CERTS adds the AWS

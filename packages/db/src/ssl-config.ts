@@ -22,6 +22,7 @@ export function resolveSslConfig(
   env: Partial<NodeJS.ProcessEnv> = process.env,
 ): SslConfig {
   if (isLocalhostUrl(databaseUrl)) return undefined;
+  if (env.PRISMA_DISABLE_TLS === '1') return undefined;
   if (env.PRISMA_ALLOW_INSECURE_TLS === '1') return { rejectUnauthorized: false };
   // Verified TLS via Node's default trust store, which includes Amazon Root
   // CA 1 — where AWS RDS Proxy chains terminate. Hostname check is skipped

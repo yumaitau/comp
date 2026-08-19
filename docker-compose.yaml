@@ -7,8 +7,8 @@ x-logging: &default-logging
 
 x-frontend-environment: &frontend-environment
   HOSTNAME: 0.0.0.0
-  DATABASE_URL: postgresql://comp:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/comp?sslmode=require
-  PRISMA_ALLOW_INSECURE_TLS: '1'
+  DATABASE_URL: postgresql://comp:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/comp
+  PRISMA_DISABLE_TLS: '1'
   SECRET_KEY: ${SERVICE_HEX_64_AUTH}
   AUTH_SECRET: ${SERVICE_HEX_64_AUTH}
   BETTER_AUTH_SECRET: ${SERVICE_HEX_64_AUTH}
@@ -19,6 +19,15 @@ x-frontend-environment: &frontend-environment
   NEXT_PUBLIC_API_URL: https://trycomp-api.yumait.au
   NEXT_PUBLIC_PORTAL_URL: https://trycomp-portal.yumait.au
   AUTH_TRUSTED_ORIGINS: https://trycomp-app.yumait.au,https://trycomp-portal.yumait.au,https://trycomp-api.yumait.au
+  UPSTASH_REDIS_REST_URL: http://redis-http:80
+  UPSTASH_REDIS_REST_TOKEN: ${SERVICE_HEX_64_REDIS_REST}
+  APP_AWS_REGION: ${APP_AWS_REGION:-ap-southeast-2}
+  APP_AWS_ACCESS_KEY_ID: ${APP_AWS_ACCESS_KEY_ID:-}
+  APP_AWS_SECRET_ACCESS_KEY: ${APP_AWS_SECRET_ACCESS_KEY:-}
+  APP_AWS_BUCKET_NAME: ${APP_AWS_BUCKET_NAME:-}
+  APP_AWS_QUESTIONNAIRE_UPLOAD_BUCKET: ${APP_AWS_BUCKET_NAME:-}
+  APP_AWS_KNOWLEDGE_BASE_BUCKET: ${APP_AWS_BUCKET_NAME:-}
+  APP_AWS_ORG_ASSETS_BUCKET: ${APP_AWS_BUCKET_NAME:-}
 
 services:
   app:
@@ -74,6 +83,39 @@ services:
       - legacy
     logging: *default-logging
 
+  redis:
+    image: redis:7.4-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --requirepass
+      - ${SERVICE_PASSWORD_64_REDIS}
+    environment:
+      REDIS_PASSWORD: ${SERVICE_PASSWORD_64_REDIS}
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$${REDIS_PASSWORD}" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+
+  redis-http:
+    image: hiett/serverless-redis-http:latest
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: ${SERVICE_HEX_64_REDIS_REST}
+      SRH_CONNECTION_STRING: redis://:${SERVICE_PASSWORD_64_REDIS}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
   api:
     build:
       context: .
@@ -82,8 +124,8 @@ services:
     ports:
       - '127.0.0.1:3333:3333'
     environment:
-      DATABASE_URL: postgresql://comp:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/comp?sslmode=require
-      PRISMA_ALLOW_INSECURE_TLS: '1'
+      DATABASE_URL: postgresql://comp:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/comp
+      PRISMA_DISABLE_TLS: '1'
       SECRET_KEY: ${SERVICE_HEX_64_AUTH}
       INTERNAL_API_TOKEN: ${SERVICE_HEX_64_INTERNAL}
       MACED_API_KEY: mc_dev_${SERVICE_HEX_64_MACED}
@@ -95,10 +137,15 @@ services:
       NEXT_PUBLIC_APP_URL: https://trycomp-app.yumait.au
       NEXT_PUBLIC_PORTAL_URL: https://trycomp-portal.yumait.au
       AUTH_TRUSTED_ORIGINS: https://trycomp-app.yumait.au,https://trycomp-portal.yumait.au,https://trycomp-api.yumait.au
-      APP_AWS_REGION: us-east-1
-      APP_AWS_ACCESS_KEY_ID: self-hosted-placeholder
-      APP_AWS_SECRET_ACCESS_KEY: self-hosted-placeholder
-      APP_AWS_BUCKET_NAME: self-hosted-placeholder
+      UPSTASH_REDIS_REST_URL: http://redis-http:80
+      UPSTASH_REDIS_REST_TOKEN: ${SERVICE_HEX_64_REDIS_REST}
+      APP_AWS_REGION: ${APP_AWS_REGION:-ap-southeast-2}
+      APP_AWS_ACCESS_KEY_ID: ${APP_AWS_ACCESS_KEY_ID:-}
+      APP_AWS_SECRET_ACCESS_KEY: ${APP_AWS_SECRET_ACCESS_KEY:-}
+      APP_AWS_BUCKET_NAME: ${APP_AWS_BUCKET_NAME:-}
+      APP_AWS_QUESTIONNAIRE_UPLOAD_BUCKET: ${APP_AWS_BUCKET_NAME:-}
+      APP_AWS_KNOWLEDGE_BASE_BUCKET: ${APP_AWS_BUCKET_NAME:-}
+      APP_AWS_ORG_ASSETS_BUCKET: ${APP_AWS_BUCKET_NAME:-}
       PORT: 3333
     restart: unless-stopped
     healthcheck:
@@ -116,3 +163,6 @@ networks:
   legacy:
     external: true
     name: comp_default
+
+volumes:
+  redis-data:

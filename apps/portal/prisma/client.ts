@@ -24,13 +24,14 @@ function isLocalhostUrl(connectionString: string): boolean {
 function createPrismaClient(): PrismaClient {
   const rawUrl = process.env.DATABASE_URL!;
   const isLocalhost = isLocalhostUrl(rawUrl);
+  const disableTls = process.env.PRISMA_DISABLE_TLS === '1';
   const allowInsecure = process.env.PRISMA_ALLOW_INSECURE_TLS === '1';
 
   // See apps/app/prisma/client.ts for the rationale on dropping `ssl.ca`
   // (replaces rather than augments the trust store; broke RDS Proxy
   // chain validation).
   const ssl: undefined | { checkServerIdentity: () => undefined } | { rejectUnauthorized: false } =
-    isLocalhost
+    isLocalhost || disableTls
       ? undefined
       : allowInsecure
         ? { rejectUnauthorized: false }
