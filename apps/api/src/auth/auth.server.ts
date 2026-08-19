@@ -31,6 +31,7 @@ import {
   getBetterAuthTrustedOrigins,
   isStaticTrustedOrigin,
 } from './origin-policy';
+import { resolveAuthCookieDomain } from './cookie-domain';
 
 export {
   getBetterAuthTrustedOrigins,
@@ -51,14 +52,7 @@ const MAGIC_LINK_EXPIRES_IN_SECONDS = 60 * 60; // 1 hour
  */
 function getCookieDomain(): string | undefined {
   const baseUrl = process.env.BASE_URL || '';
-
-  if (baseUrl.includes('staging.trycomp.ai')) {
-    return '.staging.trycomp.ai';
-  }
-  if (baseUrl.includes('trycomp.ai')) {
-    return '.trycomp.ai';
-  }
-  return undefined;
+  return resolveAuthCookieDomain(baseUrl, process.env.AUTH_COOKIE_DOMAIN);
 }
 
 // ── Custom domain lookup via Redis cache ─────────────────────────────────────

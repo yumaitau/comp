@@ -133,6 +133,7 @@ services:
       RESEND_FROM_DEFAULT: ${RESEND_FROM_DEFAULT:-}
       RESEND_FROM_SYSTEM: ${RESEND_FROM_SYSTEM:-}
       BASE_URL: https://trycomp-api.yumait.au
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:-}
       TRUST_APP_URL: https://trycomp-portal.yumait.au
       NEXT_PUBLIC_APP_URL: https://trycomp-app.yumait.au
       NEXT_PUBLIC_PORTAL_URL: https://trycomp-portal.yumait.au
