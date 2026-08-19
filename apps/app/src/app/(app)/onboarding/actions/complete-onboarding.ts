@@ -70,6 +70,11 @@ export const completeOnboarding = authActionClientWithoutOrg
           organizationId: parsedInput.organizationId,
           deactivated: false,
         },
+        include: {
+          organization: {
+            select: { onboardingCompleted: true },
+          },
+        },
       });
 
       if (!member) {
@@ -87,6 +92,16 @@ export const completeOnboarding = authActionClientWithoutOrg
           organizationId: parsedInput.organizationId,
         },
       });
+
+      // A prior attempt may have completed the DB work but failed while
+      // starting optional background jobs. Treat retries as successful.
+      if (member.organization.onboardingCompleted) {
+        return {
+          success: true,
+          organizationId: parsedInput.organizationId,
+          redirectUrl: `/${parsedInput.organizationId}/`,
+        };
+      }
 
       // Save the remaining steps to context
       const postPaymentSteps = steps.slice(3); // Steps 4-12
@@ -194,26 +209,46 @@ export const completeOnboarding = authActionClientWithoutOrg
         update: {},
       });
 
-      // Now trigger the jobs that were skipped during minimal creation
-      const handle = await tasks.trigger<typeof onboardOrganizationTask>('onboard-organization', {
-        organizationId: parsedInput.organizationId,
-      });
+      let triggerJobId: string | undefined;
+      let publicAccessToken: string | undefined;
 
-      // Update onboarding record with job ID
-      await db.onboarding.update({
-        where: {
-          organizationId: parsedInput.organizationId,
-        },
-        data: { triggerJobId: handle.id },
-      });
+      if (process.env.TRIGGER_SECRET_KEY) {
+        try {
+          // Trigger jobs enhance onboarding, but must not block core completion.
+          const handle = await tasks.trigger<typeof onboardOrganizationTask>(
+            'onboard-organization',
+            {
+              organizationId: parsedInput.organizationId,
+            },
+          );
 
-      // Set cookie for job tracking
-      (await cookies()).set('publicAccessToken', handle.publicAccessToken);
+          triggerJobId = handle.id;
+          publicAccessToken = handle.publicAccessToken;
 
-      // Create Fleet Label
-      await tasks.trigger<typeof createFleetLabelForOrg>('create-fleet-label-for-org', {
-        organizationId: parsedInput.organizationId,
-      });
+          await db.onboarding.update({
+            where: {
+              organizationId: parsedInput.organizationId,
+            },
+            data: { triggerJobId },
+          });
+
+          (await cookies()).set('publicAccessToken', publicAccessToken);
+        } catch (error) {
+          console.error('[complete-onboarding] Failed to start onboarding job:', error);
+        }
+
+        try {
+          await tasks.trigger<typeof createFleetLabelForOrg>('create-fleet-label-for-org', {
+            organizationId: parsedInput.organizationId,
+          });
+        } catch (error) {
+          console.error('[complete-onboarding] Failed to create fleet label:', error);
+        }
+      } else {
+        console.warn(
+          '[complete-onboarding] TRIGGER_SECRET_KEY is not configured; skipping background jobs',
+        );
+      }
 
       // Revalidate paths
       const headersList = await headers();
@@ -226,8 +261,8 @@ export const completeOnboarding = authActionClientWithoutOrg
 
       return {
         success: true,
-        handle: handle.id,
-        publicAccessToken: handle.publicAccessToken,
+        handle: triggerJobId,
+        publicAccessToken,
         organizationId: parsedInput.organizationId,
         redirectUrl: `/${parsedInput.organizationId}/`,
       };
@@ -247,4 +282,3 @@ export const completeOnboarding = authActionClientWithoutOrg
       };
     }
   });
-
