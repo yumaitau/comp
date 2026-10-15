@@ -147,12 +147,6 @@ jobs:
           ZIP_NAME: ${{ steps.version.outputs.zip_name }}
         run: zip -r "../$ZIP_NAME" .
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-questionnaire-extension-${{ steps.version.outputs.version }}
-          path: ${{ env.EXTENSION_DIR }}/dist/${{ steps.version.outputs.zip_name }}
-          if-no-files-found: error
 
       - name: Validate Chrome Web Store secrets
         env:
