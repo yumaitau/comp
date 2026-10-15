@@ -136,6 +136,7 @@ jobs:
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: device-agent-macos
           path: |
             packages/device-agent/release/*.dmg
@@ -285,6 +286,7 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: device-agent-windows
           path: |
             packages/device-agent/release/*.exe
@@ -337,6 +339,7 @@ jobs:
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: device-agent-linux
           path: |
             packages/device-agent/release/*.AppImage
